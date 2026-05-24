@@ -1,4 +1,4 @@
-"""中文规则集（punct_audit P1-P9 + humanize_check R1-R7 字符级规则）。
+"""中文规则集（punct_audit P1-P7 (P8-P9 deferred to 0.2.0+) + humanize_check R1-R7 字符级规则）。
 
 迁入自 chinese-academic-paper-rigor skill humanize_check.py.template + weiwuer/punct_audit.py。
 通用化：词表与规则代码解耦；学科特异规则归 projects/<name>/rules/。

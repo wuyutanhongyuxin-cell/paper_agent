@@ -4,6 +4,7 @@ spec §B.3 audit/rules/{zh,en,ja}.py.
 """
 from __future__ import annotations
 
+import copy
 from importlib import import_module
 
 SUPPORTED_LANGS = ("zh", "en", "ja")
@@ -14,4 +15,4 @@ def load_rules(lang: str) -> dict:
     if lang not in SUPPORTED_LANGS:
         raise KeyError(f"lang={lang!r} not in {SUPPORTED_LANGS}")
     mod = import_module(f"paper_agent.audit.rules.{lang}")
-    return getattr(mod, "RULES", {})
+    return copy.deepcopy(getattr(mod, "RULES", {}))

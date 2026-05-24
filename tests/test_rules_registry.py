@@ -25,3 +25,13 @@ def test_ja_rules_placeholder():
 def test_unknown_lang_raises():
     with pytest.raises(KeyError):
         load_rules("es")
+
+
+def test_load_rules_returns_isolated_copy():
+    """Mutation of returned RULES must not leak to subsequent calls."""
+    r1 = load_rules("zh")
+    r1["humanize_ai_zh_words"].append("CONTAMINATED")
+    r1["punct_patterns"]["P99_injected"] = "x"
+    r2 = load_rules("zh")
+    assert "CONTAMINATED" not in r2["humanize_ai_zh_words"]
+    assert "P99_injected" not in r2["punct_patterns"]
