@@ -38,7 +38,7 @@ def test_biber_tool_optional(fixtures_dir, tmp_path):
 
 
 def test_required_fields_optional(fixtures_dir, tmp_path):
-    """--required-fields triggers missing_field findings on TODO_ entry."""
+    """--required-fields triggers missing_field findings on incomplete non-TODO entries."""
     out_json = tmp_path / "rf.json"
     result = subprocess.run(
         [sys.executable, "-m", "paper_agent.audit.rule.bib_audit",
