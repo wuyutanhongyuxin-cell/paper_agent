@@ -42,6 +42,7 @@ def test_concurrent_lock_blocks(tmp_path):
             with pytest.raises(BlockingIOError):
                 _acquire_exclusive_lock(f)
     finally:
+        holder.terminate()
         holder.wait(timeout=5)
 
 

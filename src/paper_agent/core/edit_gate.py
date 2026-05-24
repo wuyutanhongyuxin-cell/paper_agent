@@ -393,4 +393,5 @@ def _read_tty_answer(prompt: str) -> str:
 
 def _print_colored_diff_full(diff_text: str) -> None:
     """打印完整 diff（无折叠）。强制全文展示是 T5 indirect injection 缓解。"""
+    # 0.1.0 placeholder — colorama integration deferred (name reserved for ANSI rendering)
     print(diff_text)
