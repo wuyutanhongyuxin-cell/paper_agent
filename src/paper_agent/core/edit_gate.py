@@ -349,3 +349,48 @@ def advisory(
     )
 
     return patches
+
+
+# ============================================================
+# Platform abstraction: flock + TTY
+# ============================================================
+
+def _is_real_tty() -> bool:
+    """信任锚校验：stdin AND stdout 都是真 TTY（pipe/heredoc/agent IPC 一律否）。"""
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def _acquire_exclusive_lock(file_obj) -> None:
+    """排他写锁（持锁直到 file_obj.close()）。
+
+    - Windows: msvcrt.locking(LK_NBLCK) — non-blocking, 失败抛 OSError
+    - Unix:    fcntl.flock(LOCK_EX | LOCK_NB) — 同上
+    """
+    if sys.platform == "win32":
+        import msvcrt
+        try:
+            file_obj.seek(0)
+            msvcrt.locking(file_obj.fileno(), msvcrt.LK_NBLCK, 0x7FFFFFFF)
+        except OSError as e:
+            raise BlockingIOError(f"file already locked: {e}") from e
+    else:
+        import fcntl
+        try:
+            fcntl.flock(file_obj.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise
+        except OSError as e:
+            raise BlockingIOError(f"file already locked: {e}") from e
+
+
+def _read_tty_answer(prompt: str) -> str:
+    """从真实终端 (CON / /dev/tty) 读一行，不接受 sys.stdin。"""
+    tty_path = "CON" if sys.platform == "win32" else "/dev/tty"
+    with open(tty_path, "r", encoding="utf-8") as tty_in:
+        print(prompt, end="", flush=True)
+        return tty_in.readline().strip().lower()
+
+
+def _print_colored_diff_full(diff_text: str) -> None:
+    """打印完整 diff（无折叠）。强制全文展示是 T5 indirect injection 缓解。"""
+    print(diff_text)
