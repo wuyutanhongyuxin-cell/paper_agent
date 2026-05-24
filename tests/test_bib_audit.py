@@ -51,4 +51,4 @@ def test_required_fields_optional(fixtures_dir, tmp_path):
     if out_json.exists():
         findings = json.loads(out_json.read_text(encoding="utf-8"))["findings"]
         mf = [f for f in findings if f["type"] == "missing_field"]
-        assert len(mf) >= 3, f"expected >=3 missing_field on TODO_ entry, got {len(mf)}: {mf}"
+        assert len(mf) >= 3, f"expected >=3 missing_field on incomplete non-TODO entries, got {len(mf)}: {mf}"

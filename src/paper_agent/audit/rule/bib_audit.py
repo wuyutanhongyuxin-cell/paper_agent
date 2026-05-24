@@ -42,6 +42,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -331,6 +332,8 @@ def render_md(audit_id, tex_path, bib_path, summary, findings) -> str:
                 lines.append(f"- [{sev}] `{t}` `{k}` (bib L{f['bib_line']}) 缺字段 `{f['field']}`")
             elif t == "commented_placeholder":
                 lines.append(f"- [{sev}] `{t}` `{k}` (bib L{f['bib_line']}, 注释中): `{f['bib_context']}`")
+            else:
+                lines.append(f"- [{sev}] `{t}` {f.get('key', '')} {f.get('message', '')}")
     lines.append("")
     return "\n".join(lines)
 
@@ -338,47 +341,59 @@ def render_md(audit_id, tex_path, bib_path, summary, findings) -> str:
 def biber_tool_validate(bib_path):
     """spec §D.2: biber --tool --validate-datamodel backend."""
     if not shutil.which("biber"):
-        return [{"rule": "biber_tool", "severity": "INFO",
+        return [{"type": "biber_tool", "severity": "INFO", "key": "",
                  "message": "biber not in PATH; skipping --validate-datamodel"}]
     try:
         result = subprocess.run(
             ["biber", "--tool", "--validate-datamodel", str(bib_path)],
-            capture_output=True, text=True, encoding="utf-8", timeout=60,
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=60,
         )
         findings = []
         for line in (result.stdout + "\n" + result.stderr).splitlines():
             if line.startswith("ERROR"):
-                findings.append({"rule": "biber_tool.schema_error", "severity": "ERROR",
+                findings.append({"type": "biber_tool.schema_error", "severity": "ERROR", "key": "",
                                  "file": str(bib_path), "line": 0, "message": line})
             elif line.startswith("WARN"):
-                findings.append({"rule": "biber_tool.schema_warn", "severity": "WARN",
+                findings.append({"type": "biber_tool.schema_warn", "severity": "WARN", "key": "",
                                  "file": str(bib_path), "line": 0, "message": line})
         return findings
     except subprocess.TimeoutExpired:
-        return [{"rule": "biber_tool", "severity": "WARN", "message": "biber timeout 60s"}]
+        return [{"type": "biber_tool", "severity": "WARN", "key": "",
+                 "message": "biber timeout 60s"}]
+    except (FileNotFoundError, OSError):
+        return [{"type": "biber_tool", "severity": "WARN", "key": "",
+                 "message": "biber invocation failed (binary disappeared between which() and run())"}]
 
 
 def bibtool_check(bib_path, todo_pattern="^TODO_"):
     if not shutil.which("bibtool"):
         return []
     rsc = f'select{{$key="{todo_pattern}"}}\n'
-    rsc_tmp = bib_path.with_suffix(".rsc")
-    rsc_tmp.write_text(rsc, encoding="utf-8")
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".rsc", encoding="utf-8", delete=False
+    ) as fh:
+        fh.write(rsc)
+        rsc_tmp = Path(fh.name)
     try:
         result = subprocess.run(
             ["bibtool", "-r", str(rsc_tmp), str(bib_path)],
-            capture_output=True, text=True, encoding="utf-8", timeout=30,
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=30,
         )
         findings = []
         for line in result.stdout.splitlines():
             if line.startswith("@"):
                 key = line.split("{", 1)[1].split(",", 1)[0]
-                findings.append({"rule": "bibtool.todo_placeholder", "severity": "ERROR",
-                                 "file": str(bib_path), "line": 0, "message": f"key={key}"})
+                findings.append({"type": "bibtool.todo_placeholder", "severity": "ERROR",
+                                 "key": key, "file": str(bib_path), "line": 0,
+                                 "message": f"key={key}"})
         return findings
+    except (FileNotFoundError, OSError):
+        return [{"type": "bibtool", "severity": "WARN", "key": "",
+                 "message": "bibtool invocation failed"}]
     finally:
-        if rsc_tmp.exists():
-            rsc_tmp.unlink()
+        rsc_tmp.unlink(missing_ok=True)
 
 
 def main():
@@ -475,7 +490,7 @@ def main():
     if summary["dangling_cite_count"]:
         print(f"[FAIL] dangling_cite: {summary['dangling_cite_count']} 处")
         for f in findings:
-            if f["type"] == "dangling_cite":
+            if f.get("type") == "dangling_cite":
                 print(f"    L{f['tex_line']}: \\cite{{{f['key']}}}")
     else:
         print("[ OK ] dangling_cite 0")
