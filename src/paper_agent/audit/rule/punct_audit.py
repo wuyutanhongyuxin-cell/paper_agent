@@ -319,7 +319,15 @@ def main():
             for m in p5_matches[:5]:
                 print(f"    L{line_of(body, m.start())}: ...{snippet_of(body, m.start(), m.end())}...")
             fail += 1
-            all_findings.append({"check": "P5", "count": len(p5_matches)})
+            # Build suggested_fix: take the first violating line and replace halfwidth comma with fullwidth
+            _first_m = p5_matches[0]
+            _first_ln = line_of(body, _first_m.start()) - 1
+            _lines = body.splitlines()
+            _bad_line = _lines[_first_ln] if _first_ln < len(_lines) else ""
+            _fixed_line = re.sub(r"(?<!\d),(?!\d{3}(?:\D|$))", "，", _bad_line)
+            _suggested = _fixed_line if _fixed_line != _bad_line else None
+            all_findings.append({"check": "P5", "count": len(p5_matches),
+                                 "line": _first_ln + 1, "suggested_fix": _suggested})
         else:
             print("[ OK ] P5 中文段半角逗号 0（千分位已豁免）")
 
