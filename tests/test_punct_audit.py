@@ -1,10 +1,6 @@
-"""Tests for paper_agent.audit.rule.punct_audit.
-
-Subprocess-based tests are marked; they require the full Python environment
-(WinError 5 sandbox restriction means they cannot self-verify — deferred to
-main session).  Import-level tests can run without subprocess.
-"""
+"""Tests for paper_agent.audit.rule.punct_audit."""
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -57,18 +53,12 @@ def test_check_dangling_refs_ok():
 
 # ---------------------------------------------------------------------------
 # Subprocess-based integration tests
-# DEFERRED to main session (sandbox WinError 5 blocks subprocess.run).
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skipif(
-    sys.platform == "win32",
-    reason="subprocess.run([sys.executable, ...]) blocked by sandbox WinError 5 — run in main session"
-)
 def test_detects_p1_through_p9(fixtures_dir, tmp_path):
     """Fixture has P1 (ASCII \"), P5 (half-width comma), P8 (unclosed $), P9 (dangling ref).
     Exit code must be 1; --out JSON must contain all four checks.
     """
-    import subprocess
     tex = fixtures_dir / "min_linguistics_zh.tex"
     out_json = tmp_path / "findings.json"
 
@@ -89,13 +79,8 @@ def test_detects_p1_through_p9(fixtures_dir, tmp_path):
     assert "P9" in checks_hit, f"P9 not in findings: {checks_hit}"
 
 
-@pytest.mark.skipif(
-    sys.platform == "win32",
-    reason="subprocess blocked — deferred to main session"
-)
 def test_pdf_mode_optional(fixtures_dir, tmp_path):
     """--pdf flag must not crash; exit code reflects findings in the file."""
-    import subprocess
     tex = fixtures_dir / "min_linguistics_zh.tex"
     result = subprocess.run(
         [sys.executable, "-m", "paper_agent.audit.rule.punct_audit",
@@ -107,13 +92,8 @@ def test_pdf_mode_optional(fixtures_dir, tmp_path):
     )
 
 
-@pytest.mark.skipif(
-    sys.platform == "win32",
-    reason="subprocess blocked — deferred to main session"
-)
 def test_lang_en_placeholder_does_not_crash(tmp_path):
     """lang=en has no punct_patterns → P1-P7 skipped; P8/P9 on empty file → exit 0."""
-    import subprocess
     clean_tex = tmp_path / "clean.tex"
     clean_tex.write_text(
         r"""\documentclass{article}
