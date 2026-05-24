@@ -395,3 +395,280 @@ def _print_colored_diff_full(diff_text: str) -> None:
     """打印完整 diff（无折叠）。强制全文展示是 T5 indirect injection 缓解。"""
     # 0.1.0 placeholder — colorama integration deferred (name reserved for ANSI rendering)
     print(diff_text)
+
+
+# ---------------------------------------------------------------------------
+# Layer 3 exceptions
+# ---------------------------------------------------------------------------
+
+class EditGateError(Exception):
+    """Base exception for all edit_gate() failures."""
+
+
+class NonInteractiveSession(EditGateError):
+    """Raised when stdin/stdout is not a real TTY."""
+
+
+class FileMutatedSinceAdvisory(EditGateError):
+    """Raised when paper.tex sha256 changed since advisory was created."""
+
+
+class PatchContextMismatch(EditGateError):
+    """Raised when diff context lines do not match current file content (fuzz=0)."""
+
+
+class UserDenied(EditGateError):
+    """Raised when user answers anything other than 'y' / 'yes' at confirmation prompt."""
+
+
+# ---------------------------------------------------------------------------
+# Layer 3 result dataclass
+# ---------------------------------------------------------------------------
+
+@dataclass
+class EditResult:
+    diff_id: str
+    applied_dir: str
+    backup_path: str
+    post_apply_sha256: str
+
+
+# ---------------------------------------------------------------------------
+# Layer 3 internal: strict unified-diff applier (no external `patch` binary)
+# ---------------------------------------------------------------------------
+
+def _parse_hunks(diff_text: str) -> list[dict]:
+    """Parse unified diff hunks.
+
+    Returns list of dicts, each with:
+        old_start: int   (1-based line number in original)
+        old_count: int
+        new_start: int
+        new_count: int
+        lines: list[str]  (raw diff lines including +/-/space, no newlines stripped)
+    """
+    hunks = []
+    current_hunk: dict | None = None
+    for raw_line in diff_text.splitlines(keepends=True):
+        line = raw_line.rstrip("\r\n")
+        if line.startswith("@@"):
+            # @@ -old_start[,old_count] +new_start[,new_count] @@
+            import re
+            m = re.match(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", line)
+            if m:
+                current_hunk = {
+                    "old_start": int(m.group(1)),
+                    "old_count": int(m.group(2)) if m.group(2) is not None else 1,
+                    "new_start": int(m.group(3)),
+                    "new_count": int(m.group(4)) if m.group(4) is not None else 1,
+                    "lines": [],
+                }
+                hunks.append(current_hunk)
+        elif current_hunk is not None:
+            if raw_line.startswith(("+", "-", " ")):
+                current_hunk["lines"].append(raw_line)
+    return hunks
+
+
+def _apply_patch_strict(original: str, diff_text: str) -> str:
+    """Apply a unified diff to original text with fuzz=0 (strict context match).
+
+    Takes original file content as a string, applies all hunks, returns new content.
+    Does NOT read from or write to disk — caller is responsible for I/O.
+
+    Raises PatchContextMismatch if any context or removed line does not
+    exactly match the original content (no fuzz, no whitespace tolerance).
+    """
+    lines = original.splitlines(keepends=True)
+
+    hunks = _parse_hunks(diff_text)
+    if not hunks:
+        raise PatchContextMismatch("diff_text contains no parseable hunks")
+
+    # Apply hunks in reverse order to avoid line number shifts
+    for hunk in reversed(hunks):
+        old_start = hunk["old_start"]  # 1-based
+        hunk_lines = hunk["lines"]
+
+        # Collect context + removed lines to verify against file
+        expected_old: list[str] = []
+        new_chunk: list[str] = []
+
+        for raw in hunk_lines:
+            if not raw:
+                continue
+            prefix = raw[0]
+            content = raw[1:]  # strip leading +/-/space marker
+            if prefix == " ":
+                expected_old.append(content)
+                new_chunk.append(content)
+            elif prefix == "-":
+                expected_old.append(content)
+                # Don't include in new_chunk (removal)
+            elif prefix == "+":
+                new_chunk.append(content)
+
+        # Verify context/removed lines match file content (fuzz=0)
+        # old_start is 1-based; slice is 0-based
+        start_idx = old_start - 1
+        end_idx = start_idx + len(expected_old)
+
+        if end_idx > len(lines):
+            raise PatchContextMismatch(
+                f"Hunk @@ -{old_start} extends beyond file length {len(lines)}"
+            )
+
+        actual_slice = [l.rstrip("\r\n") for l in lines[start_idx:end_idx]]
+        expected_stripped = [e.rstrip("\r\n") for e in expected_old]
+
+        if actual_slice != expected_stripped:
+            raise PatchContextMismatch(
+                f"Context mismatch at line {old_start}: "
+                f"expected {expected_stripped!r}, got {actual_slice!r}"
+            )
+
+        # Determine line ending from original lines in the slice
+        ending = "\n"
+        if lines and lines[0].endswith("\r\n"):
+            ending = "\r\n"
+
+        # Build new_chunk with proper line endings
+        new_chunk_with_endings = []
+        for c in new_chunk:
+            stripped = c.rstrip("\r\n")
+            new_chunk_with_endings.append(stripped + ending)
+
+        # Replace slice in lines list
+        lines[start_idx:end_idx] = new_chunk_with_endings
+
+    return "".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Layer 3: edit_gate() — the ONLY path that writes paper.tex
+# ---------------------------------------------------------------------------
+
+def edit_gate(
+    paper_root: Any,
+    diff_id: str,
+    paper_name: str = "paper",
+) -> EditResult:
+    """Layer 3: apply advisory patch to paper.tex after full security gating.
+
+    Gate order (non-negotiable, per L-033):
+      1. Real TTY check → NonInteractiveSession if False
+      2. Read advisory meta.json + diff.patch → FileNotFoundError if missing
+      3. Acquire exclusive lock on paper.tex
+      4. Re-verify sha256 under lock → FileMutatedSinceAdvisory if mismatch
+      5. Print full diff + prompt user via real TTY
+      6. Apply patch strictly (fuzz=0) → PatchContextMismatch on mismatch
+      7. Archive diff to applied/<diff_id>/
+      8. Write backup paper.tex.bak.<timestamp>
+      9. Lock released on with-block exit
+
+    Args:
+        paper_root: Path-like root of the paper project.
+        diff_id:    Advisory diff ID (16-char hex).
+        paper_name: LaTeX paper base name (default "paper").
+
+    Returns:
+        EditResult with diff_id, applied_dir, backup_path, post_apply_sha256.
+
+    Raises:
+        NonInteractiveSession:   stdin/stdout not a real TTY.
+        FileNotFoundError:       advisory dir / meta.json / diff.patch missing.
+        FileMutatedSinceAdvisory: paper.tex sha256 changed since advisory.
+        PatchContextMismatch:    diff context doesn't match file content.
+        UserDenied:              user typed anything other than 'y' / 'yes'.
+    """
+    # ---- Gate 1: real TTY -----------------------------------------------
+    if not _is_real_tty():
+        raise NonInteractiveSession(
+            "edit_gate() requires a real TTY (stdin and stdout must be a terminal). "
+            "Refusing to write paper.tex in non-interactive session."
+        )
+
+    # ---- Gate 2: read advisory ------------------------------------------
+    paper_root = Path(paper_root).resolve()
+    advisory_dir = paper_root / "advisory" / diff_id
+    meta_path = advisory_dir / "meta.json"
+    patch_path = advisory_dir / "diff.patch"
+
+    if not meta_path.exists():
+        raise FileNotFoundError(f"Advisory meta.json not found: {meta_path}")
+    if not patch_path.exists():
+        raise FileNotFoundError(f"Advisory diff.patch not found: {patch_path}")
+
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    expected_sha = meta["expected_file_sha256"]
+    diff_text = patch_path.read_text(encoding="utf-8")
+
+    paper_tex = paper_root / "src" / f"{paper_name}.tex"
+
+    # ---- Gate 3+4: acquire lock, re-verify sha256 -----------------------
+    with open(paper_tex, "r+b") as f:
+        _acquire_exclusive_lock(f)
+
+        # Re-read sha256 INSIDE the lock (f is already at position 0 after seek in lock)
+        raw_bytes = f.read()
+        current_sha = hashlib.sha256(raw_bytes).hexdigest()
+        if current_sha != expected_sha:
+            raise FileMutatedSinceAdvisory(
+                f"paper.tex has changed since advisory was created.\n"
+                f"  Advisory expected: {expected_sha}\n"
+                f"  Current sha256:    {current_sha}\n"
+                f"Re-run advisory() to generate a fresh patch."
+            )
+
+        # Decode original content from the already-read bytes
+        original_content = raw_bytes.decode("utf-8")
+
+        # ---- Gate 5: print diff + TTY confirm ---------------------------
+        _print_colored_diff_full(diff_text)
+        answer = _read_tty_answer(
+            f"\nApply patch {diff_id} to {paper_tex.name}? [y/N] "
+        )
+        if answer not in ("y", "yes"):
+            raise UserDenied(
+                f"User declined to apply patch {diff_id!r} (answered: {answer!r})."
+            )
+
+        # ---- Gate 6: apply patch (compute new content, no disk I/O yet) -
+        new_content = _apply_patch_strict(original_content, diff_text)
+        new_bytes = new_content.encode("utf-8")
+        post_sha = hashlib.sha256(new_bytes).hexdigest()
+
+        # Write new content back via the locked file handle (truncate + overwrite)
+        f.seek(0)
+        f.write(new_bytes)
+        f.truncate()
+        f.flush()
+
+        # ---- Gate 7: archive to applied/ --------------------------------
+        import shutil
+        applied_root = paper_root / "applied"
+        applied_dest = applied_root / diff_id
+        applied_dest.mkdir(parents=True, exist_ok=True)
+        for src_file in advisory_dir.iterdir():
+            shutil.copy2(src_file, applied_dest / src_file.name)
+        # Also write post_apply_sha256 to applied/ meta
+        post_meta = dict(meta)
+        post_meta["post_apply_sha256"] = post_sha
+        post_meta["applied_at"] = datetime.now(timezone.utc).isoformat()
+        (applied_dest / "meta.json").write_text(
+            json.dumps(post_meta, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+        # ---- Gate 8: backup of the ORIGINAL content before patch ---------
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        backup_path = paper_tex.with_suffix(f".tex.bak.{ts}")
+        backup_path.write_bytes(raw_bytes)
+
+        # ---- Lock released on `with` exit (Gate 9) ----------------------
+
+    return EditResult(
+        diff_id=diff_id,
+        applied_dir=str(applied_dest),
+        backup_path=str(backup_path),
+        post_apply_sha256=post_sha,
+    )
