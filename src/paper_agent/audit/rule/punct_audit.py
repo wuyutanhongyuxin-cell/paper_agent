@@ -47,6 +47,7 @@ import argparse
 from pathlib import Path
 
 from paper_agent.audit.rules import load_rules
+from paper_agent._util import reconfigure_utf8
 
 CN_CHAR = r"[一-鿿]"
 
@@ -172,6 +173,7 @@ def check_dangling_refs(body):
 
 
 def main():
+    reconfigure_utf8()
     ap = argparse.ArgumentParser(
         description="punct_audit: 标点字符级核查 P1-P9"
     )
@@ -204,10 +206,20 @@ def main():
     if have_punct:
         # Extract individual chars from the rule values
         _p1_char = pp.get("P1_ascii_double_quote_in_cn", '"')      # ASCII "
-        _p2_open  = pp.get("P2_japanese_corner_quote", "「」")[0]  # 「
-        _p2_close = pp.get("P2_japanese_corner_quote", "「」")[1]  # 」
-        _p3_ldq   = pp.get("P3_cn_curly_quote_pair", "“”")[0]  # "
-        _p3_rdq   = pp.get("P3_cn_curly_quote_pair", "“”")[1]  # "
+
+        _p2_raw = pp.get("P2_japanese_corner_quote", "「」")
+        if len(_p2_raw) != 2:
+            raise ValueError(
+                f"P2_japanese_corner_quote must be exactly 2 chars (open+close), got {_p2_raw!r}"
+            )
+        _p2_open, _p2_close = _p2_raw[0], _p2_raw[1]
+
+        _p3_raw = pp.get("P3_cn_curly_quote_pair", "“”")
+        if len(_p3_raw) != 2:
+            raise ValueError(
+                f"P3_cn_curly_quote_pair must be exactly 2 chars (open+close), got {_p3_raw!r}"
+            )
+        _p3_ldq, _p3_rdq = _p3_raw[0], _p3_raw[1]
         _p4_char  = pp.get("P4_ascii_single_quote_in_cn", "'")     # ASCII '
         _p5_char  = pp.get("P5_halfwidth_comma_in_cn", ",")        # ,
         _p6_char  = pp.get("P6_halfwidth_semicolon_in_cn", ";")    # ;

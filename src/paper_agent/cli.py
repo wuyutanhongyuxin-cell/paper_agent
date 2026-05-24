@@ -3,16 +3,7 @@ import argparse
 import sys
 
 from . import __version__
-
-
-def _reconfigure_utf8():
-    """Windows cp936 兜底（PEP 686 / Python 3.15 默认 UTF-8 之前）。"""
-    if sys.platform == "win32":
-        try:
-            sys.stdout.reconfigure(encoding="utf-8")
-            sys.stderr.reconfigure(encoding="utf-8")
-        except (AttributeError, OSError):
-            pass
+from ._util import reconfigure_utf8
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -31,7 +22,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    _reconfigure_utf8()
+    reconfigure_utf8()
     parser = _build_parser()
     args = parser.parse_args(argv)
     if args.cmd is None:

@@ -32,8 +32,8 @@ HUMANIZE_AI_EN_WORDS = [
 # punct_audit P1-P7 中文段标点规则（U+ 编码注释见 weiwuer/punct_audit.py）
 PUNCT_PATTERNS = {
     "P1_ascii_double_quote_in_cn": "\"",        # ASCII U+0022
-    "P2_japanese_corner_quote":    "「」",  # U+300C / U+300D
-    "P3_cn_curly_quote_pair":      "“”",  # U+201C / U+201D
+    "P2_japanese_corner_quote":    "「」",  # U+300C/U+300D — MUST be exactly 2 chars (open+close)
+    "P3_cn_curly_quote_pair":      "“”",  # U+201C/U+201D — MUST be exactly 2 chars (open+close)
     "P4_ascii_single_quote_in_cn": "'",         # ASCII U+0027
     "P5_halfwidth_comma_in_cn":    ",",         # U+002C
     "P6_halfwidth_semicolon_in_cn": ";",        # U+003B

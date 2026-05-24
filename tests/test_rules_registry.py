@@ -35,3 +35,11 @@ def test_load_rules_returns_isolated_copy():
     r2 = load_rules("zh")
     assert "CONTAMINATED" not in r2["humanize_ai_zh_words"]
     assert "P99_injected" not in r2["punct_patterns"]
+
+
+def test_p2_p3_must_be_exactly_two_chars():
+    """zh.py PUNCT_PATTERNS P2/P3 contract: exactly 2 chars (open+close)."""
+    rules = load_rules("zh")
+    pp = rules["punct_patterns"]
+    assert len(pp["P2_japanese_corner_quote"]) == 2
+    assert len(pp["P3_cn_curly_quote_pair"]) == 2
