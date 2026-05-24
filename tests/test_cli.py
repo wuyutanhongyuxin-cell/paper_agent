@@ -85,3 +85,57 @@ def test_apply_in_non_tty_reports_non_interactive(tmp_path):
     ), (
         f"expected NonInteractiveSession or TTY in stderr, got:\n{result.stderr!r}"
     )
+
+
+def test_init_writes_latexmkrc_and_ps1(tmp_path, fixtures_dir):
+    """paper-agent init <dir> 生成 .latexmkrc + compile.ps1。"""
+    import shutil
+    paper_root = tmp_path / "newpaper"
+    (paper_root / "src").mkdir(parents=True)
+    shutil.copy(fixtures_dir / "min_linguistics_zh.tex", paper_root / "src" / "paper.tex")
+    result = subprocess.run(
+        [sys.executable, "-m", "paper_agent.cli", "init",
+         str(paper_root), "--lang", "zh", "--field", "linguistics"],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    assert result.returncode == 0, (
+        f"init failed: stdout={result.stdout!r} stderr={result.stderr!r}"
+    )
+    assert (paper_root / ".latexmkrc").exists()
+    assert (paper_root / "compile.ps1").exists()
+
+
+def test_audit_returns_findings_for_fixture(tmp_path, fixtures_dir):
+    """audit fixture 输出 findings 行；非 --strict → 退出 0。"""
+    import shutil
+    paper_root = tmp_path / "p"
+    (paper_root / "src").mkdir(parents=True)
+    shutil.copy(fixtures_dir / "min_linguistics_zh.tex", paper_root / "src" / "paper.tex")
+    shutil.copy(fixtures_dir / "min_linguistics_zh.bib", paper_root / "src" / "references.bib")
+    result = subprocess.run(
+        [sys.executable, "-m", "paper_agent.cli", "audit",
+         str(paper_root), "--rules", "bib,punct,humanize"],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    assert result.returncode == 0, (
+        f"audit failed: stdout={result.stdout!r} stderr={result.stderr!r}"
+    )
+    assert "findings" in result.stdout.lower()
+
+
+def test_audit_strict_exits_nonzero_on_errors(tmp_path, fixtures_dir):
+    """fixture 含 ERROR (P5 半角逗号 / dangling_cite) → --strict 返 1。"""
+    import shutil
+    paper_root = tmp_path / "p"
+    (paper_root / "src").mkdir(parents=True)
+    shutil.copy(fixtures_dir / "min_linguistics_zh.tex", paper_root / "src" / "paper.tex")
+    shutil.copy(fixtures_dir / "min_linguistics_zh.bib", paper_root / "src" / "references.bib")
+    result = subprocess.run(
+        [sys.executable, "-m", "paper_agent.cli", "audit",
+         str(paper_root), "--rules", "bib,punct,humanize", "--strict"],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    assert result.returncode == 1, (
+        f"expected rc=1 due to ERROR findings, got rc={result.returncode}\n"
+        f"stdout={result.stdout[:500]}\nstderr={result.stderr[:500]}"
+    )
