@@ -8,6 +8,8 @@
 HUMANIZE_LLM_TRACES = r"agent|LLM|AI|大模型|生成式|chatgpt|claude|gemini|gpt-"
 
 # R2 AI 高频中文词（含 lookahead 放过 L-046 attribution）
+# 前 11 词与单仓库 tools/humanize_check.py 源 RULES["R2_AI高频词"] 等价；
+# "毋庸置疑"/"此外" 为 paper-agent 通用化扩展，来自 chinese-docx-humanize skill 词表（含义 = AI 衔接副词典型）。
 HUMANIZE_AI_ZH_WORDS = [
     "本文",         # 后接非"为/，/："
     "本研究",       # 同上
@@ -20,8 +22,8 @@ HUMANIZE_AI_ZH_WORDS = [
     "核心要义",
     "赋能",
     "破局",
-    "毋庸置疑",
-    "此外",         # AI 衔接词典型
+    "毋庸置疑",     # 扩展（非源 R2）
+    "此外",         # 扩展（非源 R2）— AI 衔接词典型
 ]
 
 # R3 AI 高频英文词

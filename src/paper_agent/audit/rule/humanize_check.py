@@ -78,7 +78,7 @@ YEAR_RE = re.compile(r"^\d{4}$")
 def build_rules(lang: str) -> dict:
     """Build full RULES dict: R1-R3 from load_rules(lang), R4-R7 from static."""
     rules_data = load_rules(lang)
-    llm_pat = rules_data.get("humanize_llm_traces", "")
+    llm_pat = rules_data.get("humanize_llm_traces", "") or r"(?!x)x"
     zh_words = rules_data.get("humanize_ai_zh_words", [])
     en_words = rules_data.get("humanize_ai_en_words", [])
 
@@ -362,7 +362,12 @@ def main():
     # Write JSON output if requested
     if args.out is not None:
         args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(json.dumps(findings, ensure_ascii=False, indent=2), encoding="utf-8")
+        out_obj = {
+            "source": str(src),
+            "lang": args.lang,
+            "findings": findings,
+        }
+        args.out.write_text(json.dumps(out_obj, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"[out] {args.out} ({len(findings)} findings)")
 
     print()
