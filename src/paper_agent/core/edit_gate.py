@@ -12,8 +12,7 @@ import hashlib
 import json
 import subprocess
 import sys
-import tempfile
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -233,7 +232,11 @@ def _build_diff(before_lines: list[str], after_lines: list[str], filename: str =
 
 
 def _diff_id(sha: str, rule: str, line: int, col: Any) -> str:
-    """Deterministic diff_id: sha256(sha|rule|line|col)[:16]."""
+    """Deterministic diff_id: sha256(sha|rule|line|col)[:16].
+
+    col=None is interpolated as the literal string "None" via f-string default;
+    this is the spec formula (plan line 1396) and must stay stable across commits.
+    """
     h = hashlib.sha256(f"{sha}|{rule}|{line}|{col}".encode()).hexdigest()
     return h[:16]
 
