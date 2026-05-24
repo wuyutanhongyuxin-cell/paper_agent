@@ -94,22 +94,25 @@ def _run_rule_module(
 ) -> list[Finding]:
     """Run a rule module as a subprocess, return normalized Finding list.
 
-    Writes --out JSON to a temp file inside paper_root/audit/ so the output
-    is in a sibling directory (L-033 OK).  paper.tex is never touched.
+    extra_args must include --out <path>; the output path is extracted from
+    extra_args so the caller controls where output lands (e.g. audit/<run_id>/).
+    paper.tex is never touched.
     """
-    audit_dir = paper_root / "audit"
-    audit_dir.mkdir(parents=True, exist_ok=True)
-
-    # Use a deterministic-ish name so parallel calls don't collide; use pid + module
-    safe_name = module_name.replace(".", "_")
-    out_path = audit_dir / f"{safe_name}_out.json"
+    # Extract out_path from extra_args (caller always passes --out)
+    if "--out" in extra_args:
+        out_path = Path(extra_args[extra_args.index("--out") + 1])
+    else:
+        # Fallback: write to audit/ flat (should not normally happen)
+        audit_dir = paper_root / "audit"
+        audit_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = module_name.replace(".", "_")
+        out_path = audit_dir / f"{safe_name}_out.json"
+        extra_args = extra_args + ["--out", str(out_path)]
 
     cmd = [
         sys.executable,
         "-m",
         module_name,
-        "--out",
-        str(out_path),
     ] + extra_args
 
     result = subprocess.run(
@@ -152,6 +155,7 @@ def audit(
     paper_root: Any,
     rules: list[str] | None = None,
     lang: str = "zh",
+    paper_name: str = "paper",
 ) -> list[Finding]:
     """Layer 1: run rule modules read-only; return list of Finding.
 
@@ -172,8 +176,14 @@ def audit(
         rules = ["punct", "bib", "humanize"]
 
     src_dir = paper_root / "src"
-    paper_tex = src_dir / "paper.tex"
+    paper_tex = src_dir / f"{paper_name}.tex"
     bib_file = src_dir / "references.bib"
+
+    audit_dir = paper_root / "audit"
+    audit_dir.mkdir(exist_ok=True)
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    run_dir = audit_dir / run_id
+    run_dir.mkdir(exist_ok=True)
 
     all_findings: list[Finding] = []
 
@@ -182,18 +192,20 @@ def audit(
         if module is None:
             raise ValueError(f"Unknown rule set: {rule!r}. Known: {list(_RULE_MODULE_MAP)}")
 
+        out_path = run_dir / f"{rule}.json"
+
         if rule == "punct":
             if not paper_tex.exists():
                 continue
-            extra = ["--source", str(paper_tex), "--lang", lang]
+            extra = ["--source", str(paper_tex), "--lang", lang, "--out", str(out_path)]
         elif rule == "bib":
             if not paper_tex.exists() or not bib_file.exists():
                 continue
-            extra = ["--tex", str(paper_tex), "--bib", str(bib_file)]
+            extra = ["--tex", str(paper_tex), "--bib", str(bib_file), "--out", str(out_path)]
         elif rule == "humanize":
             if not paper_tex.exists():
                 continue
-            extra = ["--source", str(paper_tex), "--lang", lang]
+            extra = ["--source", str(paper_tex), "--lang", lang, "--out", str(out_path)]
         else:
             extra = []
 
@@ -221,16 +233,16 @@ def _build_diff(before_lines: list[str], after_lines: list[str], filename: str =
 
 
 def _diff_id(sha: str, rule: str, line: int, col: Any) -> str:
-    """Deterministic diff_id: sha256(sha + rule + line + col)[:16]."""
-    col_str = str(col) if col is not None else ""
-    raw = sha + rule + str(line) + col_str
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+    """Deterministic diff_id: sha256(sha|rule|line|col)[:16]."""
+    h = hashlib.sha256(f"{sha}|{rule}|{line}|{col}".encode()).hexdigest()
+    return h[:16]
 
 
 def advisory(
     paper_root: Any,
     rules: list[str] | None = None,
     lang: str = "zh",
+    paper_name: str = "paper",
 ) -> list[dict]:
     """Layer 2: run audit(), then write advisory/<diff_id>/ for findings with suggested_fix.
 
@@ -253,12 +265,12 @@ def advisory(
     """
     paper_root = Path(paper_root).resolve()
     src_dir = paper_root / "src"
-    paper_tex = src_dir / "paper.tex"
+    paper_tex = src_dir / f"{paper_name}.tex"
 
     # Compute sha256 of paper.tex before anything
     sha_before = hashlib.sha256(paper_tex.read_bytes()).hexdigest()
 
-    findings = audit(paper_root, rules=rules, lang=lang)
+    findings = audit(paper_root, rules=rules, lang=lang, paper_name=paper_name)
 
     # Filter to findings that have a suggested_fix
     actionable = [f for f in findings if f.suggested_fix is not None]
@@ -292,7 +304,7 @@ def advisory(
             before_lines = []
             after_lines = [finding.suggested_fix]
 
-        diff_text = _build_diff(before_lines, after_lines, "paper.tex")
+        diff_text = _build_diff(before_lines, after_lines, f"{paper_name}.tex")
 
         (advisory_dir / "before.txt").write_text(
             "".join(before_lines), encoding="utf-8"
