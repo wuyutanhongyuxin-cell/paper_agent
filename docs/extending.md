@@ -78,6 +78,81 @@ paragraph 提取规则：
 - 跳过 < 30 字符的过短段
 - LaTeX `%`-注释剥除后再分段
 
+## score 子包：7 维评分 + halt（0.1.1.dev M-D）
+
+`paper_agent.score` 把 spec §D.3/§D.4 7 维评分 schema 和 halt 机制固化为 paper-agnostic 子包。M-D 仅落 schema + 算法；LLM evaluator 由 M-E `ensemble.py` 注入。L-033 read-only：score 子包**永不**写 paper.tex，仅写 `scored_<ts>.json` / `halt_decision.json` 到 `out/`。
+
+### 7 维评分 schema (`score/dimensions.py`)
+
+7 个维度顺序锁死（spec §D.3 contract）：
+
+| 维度 | 含义 (generic) |
+|------|---------------|
+| rigor | Methodological soundness; 统计 / 实验 / 证明严谨性 |
+| novelty | 与 prior work 差异；原创贡献度 |
+| clarity | 可读性；结构连贯；表达精度 |
+| reproducibility | 代码 / 数据 / 超参 / artifact 开放度 |
+| related | 文献覆盖 / 相关性 / critical synthesis |
+| significance | 学科内 / 跨学科预期影响 |
+| ethics | 数据来源 / 知情同意 / IRB / dual-use 考量 |
+
+Anti-inflation 7 档区间锚（强制 LLM 先选区间再给分）：
+
+| score | tier label |
+|-------|-----------|
+| 0-20  | fatally flawed |
+| 21-40 | substantially flawed |
+| 41-55 | significant issues |
+| 56-70 | acceptable |
+| 71-85 | strong |
+| 86-92 | excellent |
+| 93-100 | exceptional |
+
+CLI:
+```bash
+python -m paper_agent.score.dimensions --dump-template --paper-id <id> --out scored_template.json
+```
+
+Self-reliability α confidence 三段（Krippendorff α 同模型多采样一致性，Rating Roulette EMNLP 2025 arXiv:2510.27106）：
+
+| α range       | confidence | 下游 |
+|---------------|------------|------|
+| α ≥ 0.80      | `high`     | 达标，ensemble 分作终值 |
+| 0.67 ≤ α<0.80 | `low`      | 低置信通过；下游必须标注 |
+| α < 0.67 / None | `fail`   | 重跑；3 次失败人工介入 |
+
+### halt 机制 (`score/halt.py`)
+
+5 个 exit code（优先级 error > halt-by-user > converged > iter-cap > plateau > running）：
+
+| exit_code | 触发条件 |
+|-----------|---------|
+| 0 | converged (`user_signal_converged=True`) / running (halt=False) |
+| 1 | iter-cap (`len(history) >= iter_cap`，budget exhausted) |
+| 2 | plateau (最近 `plateau_streak` 次 total delta 严格 < `plateau_threshold`，且未到 cap) |
+| 3 | error (empty history 等) |
+| 4 | halt-by-user (`user_signal_halt=True`) |
+
+CLI:
+```bash
+python -m paper_agent.score.halt \
+    --history out/ \
+    --iter-cap 3 --plateau-streak 3 --plateau-threshold 1.0
+```
+
+返回值即 exit_code，可在 ensemble shell loop 中直接 `if [ $? -eq 2 ]; then break; fi`。
+
+### 不引入新 subcommand 的原因
+
+M-D 仅落 schema + 算法，不暴露 `paper-agent score` 顶层子命令 —— 等 M-E `score/ensemble.py` 接 LLM 后再一次性接入。当前期通过 `python -m paper_agent.score.{dimensions,halt}` module-level CLI 暴露 API，避免半成品 CLI。
+
+### 通用化承诺
+
+- DIMENSIONS 7 元 tuple 字段固定 (schema contract)，meanings 完全 generic
+- `paper_id` 完全 CLI 参数化，永不 hardcode 学科 / 语言 / paper-specific 信息
+- Anti-inflation anchors / halt 算法纯数学，paper-agnostic
+- 测试用 non_aphasia_cs fixture 验证 paper_id 注入路径，保证跨学科可消费
+
 ## 给 paper 加真值表（reverse_verify / number rule）
 
 `reverse_verify` (0.1.1.dev) 把"正文里每个数字必须 100% 命中已发布报告"做成项目可配置的反推审计。引擎 paper-agnostic，每个 paper 在自己的 `paper_root/truth.json` 列关键真值即可。
