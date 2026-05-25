@@ -3,7 +3,9 @@
 
 $pdf_mode = 5;                                                  # xelatex + xdvipdfmx 两步流程
 $xelatex = "xelatex -interaction=nonstopmode -synctex=1 %O %S";
-$biber = "biber --output-directory=%O %O %S";
+# biber: 不重定义，用 latexmk 默认 "biber %O %S"。%O 在 biber 上下文展开为空，
+# 自写 "--output-directory=%O" 会变成 "--output-directory= " 触发 biber 报错。
+# -outdir 已通过 latexmk cmdline 传递，biber 读 .bcf 时自动定位 outdir。
 
 # Pre-flight audit-gate（spec §D.5 推荐注入）
 $pre_compile_hook = sub {

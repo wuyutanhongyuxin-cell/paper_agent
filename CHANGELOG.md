@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.0.post1] - 2026-05-25
+
+### Fixed
+- `compile/templates/latexmkrc.j2`: 删除 `$biber = "biber --output-directory=%O %O %S";` 一行。
+  - 症状：`paper-agent compile` 在 paper_root/out/ 干净（无旧 `.bbl`）时，biber 必失败 (return code 2)，latexmk exit 12。
+  - 根因：`%O` 是 latexmk 给 LaTeX 引擎（xelatex/pdflatex）的占位符约定，会被注入 `-output-directory` `-recorder` 等；biber 不是 LaTeX 引擎，latexmk 不 inject 任何东西 → `--output-directory=%O` 字面展开为 `--output-directory= ` → biber 报 "Option output-directory requires an argument"。
+  - 修复：删该行，回落到 latexmk 默认 `biber %O %S`。`-outdir` 已通过 latexmk cmdline 传递，biber 读 `.bcf` 自动找到 outdir。
+  - 影响：之前已 init 的 paper 项目，需手改 `<paper_root>/.latexmkrc` 删该行；或重跑 `paper-agent init <paper_root>` 重生成。
+
+### Verified
+- 失语症 paper 真实编译：`latexmk` 全链路 (xelatex → biber 真跑 → xelatex×2 → xdvipdfmx) 跑通，`out/paper.pdf` 出 (~331 KB, 18 页)。
+- MiKTeX 25.12 + Strawberry Perl 5.42.2.1 + biber 2.21 + latexmk 4.88 Windows 11 验证。
+
 ## [0.1.0] - 2026-05-24
 
 ### Added
