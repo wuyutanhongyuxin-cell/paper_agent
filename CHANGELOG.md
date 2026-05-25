@@ -1,5 +1,38 @@
 # Changelog
 
+## [Unreleased]
+
+## [0.1.1.dev0] - 2026-05-25
+
+> Dev release — 朝 0.1.1 stable 演进中。已落地：`paper-agent new` scaffold 子命令、cross-field e2e fixture (non_aphasia_cs)、parity test 正常化重写。仍待 0.1.1 stable：4 条新 audit 规则 (fig/stat/related_work/sample) + 7 维评分 + Krippendorff α + halt rules + `reverse_verify.py` 通用化。
+
+### Added
+- `paper-agent new <paper_root> --lang zh|en --field <one of 5>` 子命令 — 一键生成完整空白论文项目（`src/paper.tex` + `src/references.bib` + `.latexmkrc` + `compile.ps1`），把"起新论文要手抄模板"盲点彻底补掉。
+  - `src/paper_agent/scaffold/{__init__.py,new_project.py}` — jinja2 模板渲染 + refuse-to-overwrite 守卫（feedback_no_overwrite_source 硬约束：既有 `paper.tex` / `references.bib` 一律 `ScaffoldError`，绝不覆盖用户在编草稿）。
+  - `src/paper_agent/scaffold/templates/paper.tex.zh.j2` — `\documentclass[zihao=-4,UTF8,fontset=fandol]{ctexart}` + biblatex backend=biber style=numeric + 4 section（Abstract + 引言 + 方法 + 结果 + 结论）+ References；包导入顺序严格 `graphicx → amsmath → amssymb → biblatex → hyperref(hidelinks)`；学科专用包（listings/tipa/siunitx/csquotes）以注释保留待 4 学科按需启用；中文国标投稿 `style=gb7714-2015` 切换提示注释。骨架本身跑 audit `0 findings (0 ERROR)`，不踩 R1-R7 / P1-P9 任何雷区。
+  - `src/paper_agent/scaffold/templates/paper.tex.en.j2` — `\documentclass[11pt,a4paper]{article}` + 同款 biblatex 配置 + 4 section（Abstract + Introduction + Methods + Results + Conclusion）；`newtxtext,newtxmath` Times 字体以注释保留；hidelinks 默认 + 预印本 colorlinks 切换提示。
+  - `src/paper_agent/scaffold/templates/references.bib.j2` — 1 条 `@misc{example_remove_me}` 占位（首编译全绿，biber 不报 "Empty database"；用户加真引用前删除）。
+  - `tests/integration/test_new_e2e.py` — 9 个 e2e 测试：zh/en 各自全骨架生成、ctexart 文档类断言、paper.tex/references.bib 各自 refuse-overwrite、zh/en 各自跑 audit `0 findings (0 ERROR)`、L-033 read-only 守卫、ja 走 argparse 拒绝。
+- `pyproject.toml` 注册 `paper_agent.scaffold.templates` 到 `[tool.setuptools.package-data]`，保证 `pip install` ship 模板文件。
+
+### Fixed
+- `tests/integration/test_aphasia_e2e.py` 3 个 parity 测试在真环境跑 byte-level stdout 比较时假报 regression（NEW 工具新增 `--lang zh` banner、`findings 已写入` 路径提示、`[INFO] D1/D2` 全角空格 advisory，OLD 工具均无；spec §C.1 Done #1 contract 本意是 finding 语义一致而非 stdout byte 一致）。
+  - 重写 `_normalize_log` 为 `_extract_findings(text) -> list[tuple[str, str]]` + `_assert_parity(tool, old_stdout, new_stdout)`。提取 `(tag, rule_code)` 二元组，tag = `OK|FAIL|WARN|INFO|ERROR`；rule_code 用**显式 ASCII** `[A-Za-z][A-Za-z0-9_]*` 抓取，遇非 ASCII 立即停（覆盖 humanize_check `R1_LLM痕迹` 在 cp936 subprocess 输出里 mojibake 为不同 latin escape 的退化）。
+  - 断言契约：NEW findings 过滤为 OLD 出现过的 rule_code 子集 → 与 OLD 严格相等。NEW 可新增 rule（不强制 OLD 覆盖），但 OLD 已有 rule 不允许丢失或 tag 变化。装饰行（`[bib_audit]` / `[size]` / `[报告]` / `[PASS]`）namespace 与 finding tag 不同，自然被滤除。
+  - 详见 `tasks/lessons.md` L-050。
+
+### Added
+- `tests/fixtures/non_aphasia_cs/src/{paper.tex,references.bib}` — k-NN ANN 算法 HNSW vs IVF-PQ 实证比较小论文（cs 领域，与失语症 / 词汇研究 / 维吾尔语无任何关联），设计为完全干净（0 findings / 0 ERROR）。
+- `tests/integration/test_non_aphasia_e2e.py` — 5 个 e2e 测试：fixture_present / audit_zero_findings / audit_strict_passes / audit_is_read_only (L-033) / init_cs_field_succeeds。回归保护 paper-agent 跨学科可消费的通用化承诺（spec §A.3 第五原则）。
+- 补 long-term generality e2e 证据缺口：之前 5 个 `min_*.tex` 仅覆盖**单元**违例 fixture，端到端只有失语症 paper，0.1.0 通用化只在单元层有证据，e2e 层没有。
+
+### Verified
+- 真环境（PowerShell + Python 3.13）跑 `pytest tests/`: **75 passed + 2 skipped (latexmk)** 0 failed (66 → 75, +9 scaffold e2e)
+- `paper-agent new <tmp> --lang zh --field cs` 真跑：4 个文件全生成；接续 `paper-agent audit <tmp> --lang zh` → **0 findings (0 ERROR)**，骨架自身完全合规
+- `paper-agent audit E:\claude_ask\Notion\weiwuer\paper --lang zh` 真跑：4 findings (3 INFO commented_placeholder TODO_ref8/9/10 + 1 WARN unused_entry he2018meldsch) 0 ERROR — 与 `.knowledge/audits/paper-agent_spec-compliance_2026-05-25.md` 完全一致
+
+---
+
 ## [0.1.0.post2] - 2026-05-25
 
 ### Fixed (docs)
