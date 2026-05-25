@@ -43,8 +43,12 @@ def _build_parser() -> argparse.ArgumentParser:
     audit_p.add_argument("--lang", default="zh", choices=["zh", "en", "ja"])
     audit_p.add_argument(
         "--rules",
-        default="bib,punct,humanize,number",
-        help="逗号分隔: bib / punct / humanize / number (number 需 paper_root/truth.json)",
+        default="bib,punct,humanize,number,figure,stat,sample",
+        help=(
+            "逗号分隔: bib / punct / humanize / number / figure / stat / sample. "
+            "number 需 paper_root/truth.json (无则 silently skip); "
+            "sample 始终 INFO 级不阻断退出码."
+        ),
     )
     audit_p.add_argument(
         "--strict",

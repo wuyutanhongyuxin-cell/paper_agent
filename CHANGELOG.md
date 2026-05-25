@@ -2,7 +2,15 @@
 
 ## [Unreleased]
 
-### Added
+### Added (M-B Light audits — spec §D.2 / 0.1.1 路线图 M-B)
+- `paper_agent.audit.rule.fig_audit` — 图（figure）一致性审计：`label_duplicate` (ERROR) / `caption_too_short` (WARN, < 20 字符) / `orphan_figure` (WARN, label 无 `\ref` 反向覆盖) / 可选 `chktex_warn` (INFO, `--use-chktex` flag). CLI `python -m paper_agent.audit.rule.fig_audit --tex ... --out ...json`. 注册到 `_RULE_MODULE_MAP` 的 `"figure"`. 21 个单元测试覆盖 strip_comments / find_figure_envs / extract_labels / extract_caption (balanced-brace + `\caption[short]{long}`) / find_ref_keys (\\ref/\\autoref/\\cref/\\Cref/\\Vref) / 三 rule semantics / `figure*` 支持 / 中文 caption / `\label` 在 figure 环境外不参与判定.
+- `paper_agent.audit.rule.stat_audit` — 统计报告格式审计：`p_value_out_of_range` (ERROR, p ∉ [0,1]) / `anova_missing_F|df|p` (WARN) / `anova_missing_eta|N` (INFO) / `mean_missing_sd_or_n` (WARN, mean 段必须有 SD) / `ci_missing_bounds` (WARN, CI 段必须有 `[lo,hi]`). 与 reverse_verify 正交（reverse_verify 知道具体数字，stat_audit 查 APA-style 格式完整性）. 与失语症 paper 王老师 "ANOVA 三个 p > 0.10" hard constraint 不冲突（王老师查数值，stat_audit 查 ∈ [0,1] 数学合法性，0.10 始终通过）. 27 个单元测试.
+- `paper_agent.audit.rule.sample_audit` — 抽 N 段人工复核 prompt 模板（INFO 级别，**永不阻断** rc）. `--n 3 --seed 42` 默认（保证 audit 可重现）. paragraph 过滤: 空行分隔 / 跳过 `\\section/\\subsection/\\subsubsection` / 跳过 `figure/table/equation/align/itemize/enumerate/verbatim/lstlisting/minted/tikzpicture/tabular` 环境内 / 跳过 < 30 字符过短段. prompt 模板 paper-agnostic (无 hardcode 学科特异术语). 14 个单元测试.
+- `core/edit_gate.py::_RULE_MODULE_MAP` 注册三个新 rule (`figure` / `stat` / `sample`); `audit()` for-loop dispatch 添加三个 rule 的 extra_args 构造分支 (均仅传 `--tex --lang --out`, 不需要额外配置).
+- `cli.py` audit subparser `--rules` 默认从 `"bib,punct,humanize,number"` 扩到 `"bib,punct,humanize,number,figure,stat,sample"` (7 rule 全开). help 文字明确 `sample` 始终 INFO 级不阻断退出码.
+- `docs/extending.md` 新增三个 rule 的 section: detection table / CLI usage / paragraph 提取规则 (sample_audit).
+
+### Added (M-A reverse_verify 通用化)
 - `paper_agent.audit.rule.reverse_verify` 通用化"真值反推"审计（spec §C.2 / 0.1.1 路线图 M-A）—— 把 `number_audit.py` 硬编码 28 项失语症 TRUTH dict 通用化为 `<paper_root>/truth.json` 外部配置驱动。引擎完全 paper-agnostic，每个 paper 自管真值表（[[feedback_paper_agent_long_term_generality]] 长期通用化承诺的关键一环）。
   - `src/paper_agent/audit/rule/reverse_verify.py` — CLI `--tex --truth --lang --out`，schema 校验 + 行级 %-注释剥除（与 number_audit.py 等价语义）+ 多 candidate OR 匹配 + severity override（ERROR/WARN/INFO）。
   - `core/edit_gate.py::_RULE_MODULE_MAP` 注册 `"number"` rule；`audit()` 分发：`paper_root/truth.json` 不存在则 **silently skip**（通用化考虑：不是所有 paper 都有真值表）。

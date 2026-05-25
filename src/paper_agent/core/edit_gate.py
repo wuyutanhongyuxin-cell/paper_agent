@@ -47,6 +47,9 @@ _RULE_MODULE_MAP = {
     "bib": "paper_agent.audit.rule.bib_audit",
     "humanize": "paper_agent.audit.rule.humanize_check",
     "number": "paper_agent.audit.rule.reverse_verify",
+    "figure": "paper_agent.audit.rule.fig_audit",
+    "stat": "paper_agent.audit.rule.stat_audit",
+    "sample": "paper_agent.audit.rule.sample_audit",
 }
 
 
@@ -219,6 +222,18 @@ def audit(
                 "--lang", lang,
                 "--out", str(out_path),
             ]
+        elif rule == "figure":
+            if not paper_tex.exists():
+                continue
+            extra = ["--tex", str(paper_tex), "--lang", lang, "--out", str(out_path)]
+        elif rule == "stat":
+            if not paper_tex.exists():
+                continue
+            extra = ["--tex", str(paper_tex), "--lang", lang, "--out", str(out_path)]
+        elif rule == "sample":
+            if not paper_tex.exists():
+                continue
+            extra = ["--tex", str(paper_tex), "--lang", lang, "--out", str(out_path)]
         else:
             extra = []
 
