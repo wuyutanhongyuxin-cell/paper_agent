@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Added
+- `paper_agent.audit.rule.reverse_verify` 通用化"真值反推"审计（spec §C.2 / 0.1.1 路线图 M-A）—— 把 `number_audit.py` 硬编码 28 项失语症 TRUTH dict 通用化为 `<paper_root>/truth.json` 外部配置驱动。引擎完全 paper-agnostic，每个 paper 自管真值表（[[feedback_paper_agent_long_term_generality]] 长期通用化承诺的关键一环）。
+  - `src/paper_agent/audit/rule/reverse_verify.py` — CLI `--tex --truth --lang --out`，schema 校验 + 行级 %-注释剥除（与 number_audit.py 等价语义）+ 多 candidate OR 匹配 + severity override（ERROR/WARN/INFO）。
+  - `core/edit_gate.py::_RULE_MODULE_MAP` 注册 `"number"` rule；`audit()` 分发：`paper_root/truth.json` 不存在则 **silently skip**（通用化考虑：不是所有 paper 都有真值表）。
+  - `cli.py` audit subparser `--rules` 默认从 `"bib,punct,humanize"` 扩到 `"bib,punct,humanize,number"`。
+- `tests/test_reverse_verify.py` 18 个单元测试（strip_tex_comments / load_truth schema 校验 / run_audit hit/miss/override/comment/escaped-percent/lang-independent/metadata）。
+- `tests/integration/test_reverse_verify_e2e.py` 5 个 e2e：truth 缺失 silently skip / 全 hit 0 finding / miss → ERROR / `--rules number` 单独跑 / L-033 read-only。
+
+### Migrated (DEPRECATED)
+- `weiwuer/paper/tools/number_audit.py` 加 DEPRECATED banner（2026-06-25 sunset，与 0.1.0 GA 三件套 bib/punct/humanize_check 同序列；对账期 1 个月）。同步迁出 28 项失语症真值到 `weiwuer/paper/truth.json`。
+- 替代命令：`paper-agent audit weiwuer/paper --rules number`（实跑：28/28 命中，与原 `number_audit.py` 跑出 `[PASS] 数字反推 100% 命中` 字节级等价）。
+
+### Verified
+- 全套 pytest：**98 passed + 2 skipped (latexmk only)** 0 failed（vs 0.1.1.dev0 baseline 75 → 98, +23 = 18 unit + 5 e2e）。
+- `paper-agent audit weiwuer/paper --lang zh` 真跑：4 findings (3 INFO commented_placeholder + 1 WARN unused_entry) 0 ERROR — **未引入任何 number_miss**，与 0.1.0.post2 baseline 完全一致。
+- 直接跑 `python -m paper_agent.audit.rule.reverse_verify --tex weiwuer/paper/src/paper.tex --truth weiwuer/paper/truth.json`：`[PASS] 真值反推 28/28 命中`。
+
 ## [0.1.1.dev0] - 2026-05-25
 
 > Dev release — 朝 0.1.1 stable 演进中。已落地：`paper-agent new` scaffold 子命令、cross-field e2e fixture (non_aphasia_cs)、parity test 正常化重写。仍待 0.1.1 stable：4 条新 audit 规则 (fig/stat/related_work/sample) + 7 维评分 + Krippendorff α + halt rules + `reverse_verify.py` 通用化。

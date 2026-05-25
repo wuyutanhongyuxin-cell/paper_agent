@@ -46,6 +46,7 @@ _RULE_MODULE_MAP = {
     "punct": "paper_agent.audit.rule.punct_audit",
     "bib": "paper_agent.audit.rule.bib_audit",
     "humanize": "paper_agent.audit.rule.humanize_check",
+    "number": "paper_agent.audit.rule.reverse_verify",
 }
 
 
@@ -205,6 +206,19 @@ def audit(
             if not paper_tex.exists():
                 continue
             extra = ["--source", str(paper_tex), "--lang", lang, "--out", str(out_path)]
+        elif rule == "number":
+            # 通用化考虑：truth.json 是 paper-project-specific 的；不是所有 paper
+            # 都有真值表。不存在则 silently skip（不报错），让 paper-agent 引擎
+            # 完全 paper-agnostic（[[feedback_paper_agent_long_term_generality]]）。
+            truth_file = paper_root / "truth.json"
+            if not paper_tex.exists() or not truth_file.exists():
+                continue
+            extra = [
+                "--tex", str(paper_tex),
+                "--truth", str(truth_file),
+                "--lang", lang,
+                "--out", str(out_path),
+            ]
         else:
             extra = []
 
