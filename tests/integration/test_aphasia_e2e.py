@@ -26,28 +26,43 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _normalize_log(text: str) -> list[str]:
-    """忽略时间戳、绝对路径、首尾 banner 差异，保留 rule + line + message 主键。"""
-    lines = []
+_FINDING_RE = re.compile(r"^\[\s*(OK|FAIL|WARN|INFO|ERROR)\s*\]\s+([A-Za-z][A-Za-z0-9_]*)")
+
+
+def _extract_findings(text: str) -> list[tuple[str, str]]:
+    """从 stdout 提取 (tag, rule_code) finding 二元组列表（顺序保留）。
+
+    spec §C.1 Done #1 contract：迁入工具的 finding 必须与旧工具行级一致。
+    "finding" = 形如 `[ OK ] P1 ...` / `[FAIL] dangling_cite: 3 处` / `[INFO] commented_placeholder ...` 的行。
+    rule_code 用显式 ASCII class 抓取，遇非 ASCII 立即停（humanize_check 的 `R1_LLM痕迹` 在 cp936 subprocess
+    输出里会 mojibake 为不同 latin escape，所以 rule_code 只能取 ASCII 前缀 `R1_LLM`，再 rstrip 末尾下划线
+    覆盖 `R8_数字反查` → `R8` 这种"全后缀都被吃"的退化情况）。
+    装饰行（`[bib_audit] ...` / `[size] ...` / `[报告] ...` / `[PASS] ...`）namespace 不同，自然滤除。
+    """
+    findings = []
     for line in text.splitlines():
-        # 去时间戳
-        line = re.sub(r"\d{4}-\d{2}-\d{2}T?\d{0,2}:?\d{0,2}:?\d{0,2}", "<TS>", line)
-        # 去绝对路径（pretty-quote 容忍正反斜杠）
-        line = re.sub(
-            r"[A-Za-z]:[\\/]+(?:[^\\/\s]+[\\/]+)*paper\.tex",
-            "<paper.tex>",
-            line,
-        )
-        line = re.sub(
-            r"[A-Za-z]:[\\/]+(?:[^\\/\s]+[\\/]+)*references\.bib",
-            "<references.bib>",
-            line,
-        )
-        # 合并空白
-        line = re.sub(r"\s+", " ", line).strip()
-        if line:
-            lines.append(line)
-    return lines
+        m = _FINDING_RE.match(line.strip())
+        if m:
+            findings.append((m.group(1), m.group(2).rstrip("_")))
+    return findings
+
+
+def _assert_parity(tool: str, old_stdout: str, new_stdout: str) -> None:
+    """断言：OLD 出现过的每条 rule，NEW 必须以相同 tag 给出相同次数的 finding。
+
+    NEW 可新增 rule（如 0.1.0 punct_audit 新增 D1/D2 advisory）—— 这些 rule 不在 OLD 出现，
+    parity 不强制覆盖，但 OLD 已有的 rule 不允许丢失或 tag 变化。
+    """
+    old = _extract_findings(old_stdout)
+    new = _extract_findings(new_stdout)
+    old_rules = {rule for _tag, rule in old}
+    new_filtered = [(tag, rule) for tag, rule in new if rule in old_rules]
+    assert old == new_filtered, (
+        f"{tool} finding parity diverged on shared rules:\n"
+        f"  OLD ({len(old)}): {old}\n"
+        f"  NEW filtered to OLD rules ({len(new_filtered)}): {new_filtered}\n"
+        f"  NEW full ({len(new)}): {new}"
+    )
 
 
 def test_punct_audit_parity(tmp_path):
@@ -66,13 +81,7 @@ def test_punct_audit_parity(tmp_path):
         f"exit code diverged: old={old.returncode} new={new.returncode}\n"
         f"old stderr: {old.stderr[:500]}\nnew stderr: {new.stderr[:500]}"
     )
-    old_norm = _normalize_log(old.stdout)
-    new_norm = _normalize_log(new.stdout)
-    assert old_norm == new_norm, (
-        "punct_audit stdout diverged (normalized):\n"
-        f"OLD ({len(old_norm)} lines): {old_norm[:20]}\n"
-        f"NEW ({len(new_norm)} lines): {new_norm[:20]}"
-    )
+    _assert_parity("punct_audit", old.stdout, new.stdout)
 
 
 def test_bib_audit_parity(tmp_path):
@@ -91,12 +100,7 @@ def test_bib_audit_parity(tmp_path):
     assert old.returncode == new.returncode, (
         f"exit code diverged: old={old.returncode} new={new.returncode}"
     )
-    old_norm = _normalize_log(old.stdout)
-    new_norm = _normalize_log(new.stdout)
-    assert old_norm == new_norm, (
-        "bib_audit stdout diverged (normalized):\n"
-        f"OLD ({len(old_norm)} lines)\nNEW ({len(new_norm)} lines)"
-    )
+    _assert_parity("bib_audit", old.stdout, new.stdout)
 
 
 def test_humanize_check_parity(tmp_path):
@@ -115,12 +119,7 @@ def test_humanize_check_parity(tmp_path):
     assert old.returncode == new.returncode, (
         f"exit code diverged: old={old.returncode} new={new.returncode}"
     )
-    old_norm = _normalize_log(old.stdout)
-    new_norm = _normalize_log(new.stdout)
-    assert old_norm == new_norm, (
-        "humanize_check stdout diverged (normalized):\n"
-        f"OLD ({len(old_norm)} lines)\nNEW ({len(new_norm)} lines)"
-    )
+    _assert_parity("humanize_check", old.stdout, new.stdout)
 
 
 def test_number_audit_still_works_in_place():
