@@ -1,0 +1,60 @@
+% paper.tex — scaffold from `paper-agent new` (lang=en, field={{ field }})
+% Edit placeholders below; review paper-agent's audit + edit-gate workflow first.
+% Build: powershell -File compile.ps1
+% Or:    paper-agent compile <paper_root>
+
+\documentclass[11pt,a4paper]{article}
+
+% ---- Math and graphics (keep this order) ----
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+
+% ---- Field-specific packages (uncomment the matching line) ----
+% \usepackage{listings}      % cs: code listings
+% \usepackage{tipa}          % linguistics: IPA phonetic symbols
+% \usepackage{siunitx}       % medicine / sciences: SI units
+% \usepackage{csquotes}      % humanities: scholarly quotation environments
+
+% ---- Times-style font (uncomment for journals that require it) ----
+% \usepackage{newtxtext,newtxmath}
+
+% ---- Bibliography ----
+\usepackage[backend=biber,style=numeric]{biblatex}
+\addbibresource{references.bib}
+
+% ---- Hyperlinks (hyperref must be loaded last) ----
+\usepackage[hidelinks]{hyperref}
+% For preprint / arXiv submission use:
+%   \usepackage[colorlinks=true,allcolors=blue]{hyperref}
+
+\title{Title placeholder --- replace with paper title}
+\author{Author placeholder --- replace with name / group}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Abstract placeholder. Remove this paragraph and rewrite it as 200--400 words following an IMRaD shape (background, methods, results, conclusion).
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+Introduction placeholder. Describe background, problem, and contributions. Cite the placeholder entry \cite{example_remove_me} as a sanity check on the bibliography pipeline.
+
+\section{Methods}
+\label{sec:method}
+Methods placeholder. Describe data sources, experimental design, and analysis pipeline.
+
+\section{Results}
+\label{sec:result}
+Results placeholder. Report primary findings and statistical tests.
+
+\section{Conclusion}
+\label{sec:conclusion}
+Conclusion placeholder. Summarise contributions, limitations, and follow-up work.
+
+\printbibliography
+
+\end{document}

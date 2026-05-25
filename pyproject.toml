@@ -26,6 +26,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "paper_agent.compile.templates" = ["*.j2"]
+"paper_agent.scaffold.templates" = ["*.j2"]
 "paper_agent.golden_papers" = ["**/*.tex", "**/*.bib", "**/*.json", "**/*.png", "**/*.pdf"]
 "paper_agent.audit.rules" = ["*.py"]
 

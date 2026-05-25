@@ -1,0 +1,58 @@
+% paper.tex — scaffold from `paper-agent new` (lang=zh, field={{ field }})
+% 修改占位文本前请先了解 paper-agent 的 audit + edit-gate 工作流。
+% 编译命令：powershell -File compile.ps1
+% 或：paper-agent compile <paper_root>
+
+\documentclass[zihao=-4,UTF8,fontset=fandol]{ctexart}
+
+% ---- 数学与图形（保持此顺序） ----
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+
+% ---- 学科专用包（按需取消对应行注释） ----
+% \usepackage{listings}      % cs: 代码块支持
+% \usepackage{tipa}          % linguistics: IPA 音标
+% \usepackage{siunitx}       % medicine / sciences: SI 单位
+% \usepackage{csquotes}      % humanities: 学术引文环境
+
+% ---- 参考文献 ----
+% 投稿中文国标期刊请改为 style=gb7714-2015 并安装 biblatex-gb7714-2015 包：
+%   \usepackage[backend=biber,style=gb7714-2015]{biblatex}
+\usepackage[backend=biber,style=numeric]{biblatex}
+\addbibresource{references.bib}
+
+% ---- 超链接（hyperref 必须最后加载） ----
+\usepackage[hidelinks]{hyperref}
+% 预印本可改为：\usepackage[colorlinks=true,allcolors=blue]{hyperref}
+
+\title{标题占位 —— 替换为论文题目}
+\author{作者占位 —— 替换为姓名 / 课题组}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+摘要占位 —— 删除此段后按 IMRaD 结构（背景、方法、结果、结论）改写为约 200--400 字段落。
+\end{abstract}
+
+\section{引言}
+\label{sec:intro}
+引言占位 —— 阐述研究背景、问题与主要贡献。可参考占位条目 \cite{example_remove_me}。
+
+\section{方法}
+\label{sec:method}
+方法占位 —— 描述数据来源、实验设计与分析路径。
+
+\section{结果}
+\label{sec:result}
+结果占位 —— 报告主要发现与统计检验结果。
+
+\section{结论}
+\label{sec:conclusion}
+结论占位 —— 总结贡献、限制与后续工作。
+
+\printbibliography
+
+\end{document}

@@ -25,6 +25,19 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     init_p.add_argument("--paper-name", default="paper")
 
+    new_p = sub.add_parser(
+        "new",
+        help="Scaffold a fresh paper project (paper.tex + references.bib + init)",
+    )
+    new_p.add_argument("paper_root", type=Path)
+    new_p.add_argument("--lang", default="zh", choices=["zh", "en"])
+    new_p.add_argument(
+        "--field",
+        default="linguistics",
+        choices=["linguistics", "medicine", "humanities", "cs", "sciences"],
+    )
+    new_p.add_argument("--paper-name", default="paper")
+
     audit_p = sub.add_parser("audit", help="Run audit rules (read-only)")
     audit_p.add_argument("paper_root", type=Path)
     audit_p.add_argument("--lang", default="zh", choices=["zh", "en", "ja"])
@@ -83,6 +96,47 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[init] {latexmkrc}")
         print(f"[init] {ps1}")
         print(f"[init] lang={cfg.lang} field={cfg.field}")
+        return 0
+
+    if args.cmd == "new":
+        # `new` scaffolds a fresh project: paper.tex + references.bib don't exist yet,
+        # so PaperAgentConfig.from_args (which asserts paper.tex exists) can't be used
+        # before scaffolding. We do lightweight validation inline, mkdir the target,
+        # scaffold, then run the same init steps (latexmkrc + compile.ps1).
+        from .scaffold import write_paper_skeleton
+        from .scaffold.new_project import ScaffoldError
+        from .compile.latexmkrc_gen import write_latexmkrc
+        from .compile.compile_ps1 import write_compile_ps1
+        from .core.config import SUPPORTED_FIELDS
+
+        if args.field not in SUPPORTED_FIELDS:
+            print(
+                f"[FAIL] --field={args.field!r} not in {sorted(SUPPORTED_FIELDS)}",
+                file=sys.stderr,
+            )
+            return 1
+
+        paper_root = Path(args.paper_root).resolve()
+        paper_root.mkdir(parents=True, exist_ok=True)
+
+        try:
+            scaf = write_paper_skeleton(
+                paper_root,
+                lang=args.lang,
+                field=args.field,
+                paper_name=args.paper_name,
+            )
+        except ScaffoldError as e:
+            print(f"[FAIL] ScaffoldError: {e}", file=sys.stderr)
+            return 1
+
+        latexmkrc = write_latexmkrc(paper_root)
+        ps1 = write_compile_ps1(paper_root, paper_name=args.paper_name)
+        print(f"[new] {scaf.paper_tex}")
+        print(f"[new] {scaf.references_bib}")
+        print(f"[new] {latexmkrc}")
+        print(f"[new] {ps1}")
+        print(f"[new] lang={args.lang} field={args.field}")
         return 0
 
     if args.cmd == "audit":
