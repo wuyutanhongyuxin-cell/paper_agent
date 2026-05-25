@@ -16,3 +16,4 @@ staged/
 applied/
 advisory/
 /audit/
+tests/fixtures/*/audit/
