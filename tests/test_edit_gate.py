@@ -285,14 +285,17 @@ def test_t6_concurrent_lock_blocked(paper_root):
         "time.sleep(5)\n"
     )
 
-    holder = subprocess.Popen(
-        [sys.executable, "-c", holder_script],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        env=env,
-        encoding="utf-8",
-        errors="replace",
-    )
+    try:
+        holder = subprocess.Popen(
+            [sys.executable, "-c", holder_script],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except PermissionError as e:
+        pytest.skip(f"subprocess not permitted in this environment: {e}")
 
     try:
         # Wait for holder to signal it has the lock
@@ -312,3 +315,72 @@ def test_t6_concurrent_lock_blocked(paper_root):
     with open(paper_tex, "r+b") as f:
         _acquire_exclusive_lock(f)
         # Lock released on with exit
+
+
+# ---------------------------------------------------------------------------
+# T3a: stdin pipe spoofing — attacker pre-feeds "y\n" through pipe
+# ---------------------------------------------------------------------------
+
+def test_t3a_stdin_pipe_spoofing_blocked(paper_root):
+    """Gate 1 (plan-original T3): LLM agent cannot bypass TTY guard by piping fake "y" to stdin.
+
+    Threat model: an LLM agent in the same process / a wrapper subprocess
+    pre-feeds "y\\n" through stdin pipe hoping to satisfy the TTY confirm prompt.
+    The TTY guard (_is_real_tty: stdin.isatty() AND stdout.isatty()) must return
+    False because pipe-fed stdin is not a TTY → NonInteractiveSession raised
+    BEFORE prompt is reached, no matter what the pipe contains.
+
+    Run in a subprocess with stdin=PIPE to faithfully reproduce the attack
+    (in-process mocking can't simulate the OS-level pipe spoof).
+    """
+    adv = _make_advisory(paper_root)
+    paper_tex = paper_root / "src" / "paper.tex"
+    sha_before = hashlib.sha256(paper_tex.read_bytes()).hexdigest()
+
+    env = {**os.environ, "PYTHONPATH": str(SRC_ROOT), "PYTHONIOENCODING": "utf-8"}
+
+    attack_script = (
+        "import sys\n"
+        f"sys.path.insert(0, r'{SRC_ROOT}')\n"
+        "from paper_agent.core.edit_gate import edit_gate, NonInteractiveSession\n"
+        "try:\n"
+        f"    edit_gate(r'{paper_root}', '{adv['diff_id']}')\n"
+        "    print('LEAKED:edit_gate returned without raising', flush=True)\n"
+        "    sys.exit(99)\n"
+        "except NonInteractiveSession:\n"
+        "    print('BLOCKED:NonInteractiveSession', flush=True)\n"
+        "    sys.exit(0)\n"
+        "except Exception as e:\n"
+        "    print(f'OTHER:{type(e).__name__}:{e}', flush=True)\n"
+        "    sys.exit(1)\n"
+    )
+
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", attack_script],
+            input="y\n",
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=15,
+        )
+    except PermissionError as e:
+        # Sandbox env without subprocess permission (WinError 5) — skip, not fail
+        pytest.skip(f"subprocess not permitted in this environment: {e}")
+
+    # 1. Must exit 0 (NonInteractiveSession raised — attack blocked)
+    assert proc.returncode == 0, (
+        f"TTY guard bypassed by stdin pipe spoof.\n"
+        f"  exit={proc.returncode}\n"
+        f"  stdout={proc.stdout!r}\n"
+        f"  stderr={proc.stderr!r}"
+    )
+    # 2. Must report BLOCKED, never LEAKED
+    assert "BLOCKED:NonInteractiveSession" in proc.stdout, (
+        f"Expected BLOCKED:NonInteractiveSession, got: {proc.stdout!r}"
+    )
+    assert "LEAKED" not in proc.stdout, "edit_gate silently accepted piped 'y' — L-033 violation"
+
+    # 3. paper.tex untouched (the gate must abort BEFORE touching anything)
+    sha_after = hashlib.sha256(paper_tex.read_bytes()).hexdigest()
+    assert sha_after == sha_before, "paper.tex was modified despite TTY guard"

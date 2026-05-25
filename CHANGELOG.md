@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.0.post2] - 2026-05-25
+
+### Fixed (docs)
+- `README.md` 4 处事实失真（精装版重写时凭印象描述未对账代码）：
+  - **`punct_audit` 表**：P1-P7 描述全部张冠李戴 → 改为按 `audit/rules/zh.py` `PUNCT_PATTERNS` 字面（P1=ASCII"、P2=「」、P3=""配对、P4=ASCII'、P5=半角逗号、P6=半角分号、P7=半角冒号）；补 P8 数学环境闭合 + P9 悬空 `\ref` 类（实际代码有，README 漏标）
+  - **`humanize_check` 表**：R6/R7 凭空捏造（"副词典型 / 句长方差"） → 改为实际 R6 千分位被全角化 / R7 章节标号双角；R5 半角括号语义补全；补 R8 数字反查（advisory，`--data-source`）
+  - **红队 T1-T6 表**：6 项描述与 `test_edit_gate.py` 实际**无一对应** → 改为按真实测试函数 (T1 NonInteractiveSession / T2 FileMutatedSinceAdvisory / T3 missing advisory / T4 PatchContextMismatch / T5 UserDenied / T6 concurrent flock)
+  - **0.1.1 路线图**：凭空虚构 humanize R8-R10 段落语义重复度/情感色彩/自引用 → 改为按 spec §D.2 / §C.2 真实承诺（4 条新 audit 规则 fig/stat/related_work/sample + 7 维评分 + Krippendorff α + halt rules + `reverse_verify.py` 通用化）
+- 行数统计纠正：bib_audit 440→537 行 / punct_audit 347→421 行 / humanize_check 293→383 行（精装版引用迁入前 plan 预算，实际迁入时已扩展 22-31% — 全部在 spec §D.2 0.1.0 能力范围内）
+
+### Added
+- `tests/test_edit_gate.py::test_t3a_stdin_pipe_spoofing_blocked` — plan 原意红队 T3（stdin pipe spoofing）专项测试。子进程 `subprocess.run(..., input="y\\n")` 模拟攻击者预喂 "y" 数据，断言 TTY guard 必抛 `NonInteractiveSession` 且 `paper.tex` 不被改动。
+  - 之前 T3 偷换为 `test_t3_missing_advisory`（FileNotFoundError），攻击面仅通过 T1 + `test_cli.py::test_apply_in_non_tty_reports_non_interactive` 间接覆盖。post2 补回显式测试。
+
+### Verified
+- 仓库 spec 合规审计：`.knowledge/audits/paper-agent_spec-compliance_2026-05-25.md`（28 项 ✅ / 9 项 🟡 / 5 项 ❌ 中 4 项为本次修 README，1 项 staged/ 简化保留为 0.1.1 待办）
+
+---
+
 ## [0.1.0.post1] - 2026-05-25
 
 ### Fixed
